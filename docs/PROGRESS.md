@@ -1,7 +1,7 @@
 # Project Progress
 
 **Project:** AutoML Demonstration (college project)
-**Last updated:** 2026-09-15
+**Last updated:** 2026-09-16
 **Status:** All 10 slices (0-9) complete. Ready for demonstration.
 
 Open this file any time to see where the project stands. It gets updated at the end of every slice with what changed, what passed, and what's next — no need to scroll back through chat history.
@@ -54,7 +54,7 @@ Standing addition to the plan from here on, per your explicit instruction: **exe
 | 6 | Clustering end-to-end | **Done** | 69/69 pass | 26/26 pass | 11/11 pass | See §4g. |
 | 7 | Artifact export | **Done** | 83/83 pass | 27/27 pass | 12/12 pass | See §4h. |
 | 8 | Full UI workflow, resilience, accessibility | **Done** | 86/86 pass | 31/31 pass | 25/25 pass | See §4i + addenda. |
-| 9 | Packaging, docs & final verification (incl. Docker) | **Done** | 86/86 pass | 31/31 pass | 25/25 pass | See §4j. |
+| 9 | Packaging, docs & final verification (incl. Docker) | **Done** | 88/88 pass | 31/31 pass | 25/25 pass | See §4j + §4k. |
 
 Legend: **Not started** / **In progress** / **Done** / **Blocked**
 
@@ -431,6 +431,26 @@ While performing Slice 9's required "run the real demonstration workflows agains
 - "Clean environment" verification used fresh installs (venv, `npm ci`) rather than a literally separate machine/OS — the most rigorous check practical in this session, and the one that actually caught the Docker-specific XGBoost bug; a true from-scratch OS install was not performed.
 - No CI pipeline was added (not in this slice's or any earlier slice's explicit scope) — all verification here was run locally/on-demand, consistent with every earlier slice.
 - Demonstration mode and test mode intentionally share the same small hyperparameter grids (documented in the README's known limitations) — there is no separate "fast" vs. "full" grid size, since even the full grids are already small enough to run in seconds; the project's fast/full test distinction referred to in the plan is satisfied by unit/component tests being fast and the real-training integration/e2e tests being the (still fast, seconds-scale) full layer, not by two different grid sizes.
+
+## 4k. A second real bug you found live: the regression-side counterpart of §4i-addendum
+
+After the servers were restarted for you to test locally, picking **Regression** with `neighborhood` (a categorical column - "Riverside", "Hillside", etc.) as the target on `house_prices.csv` reached Train and failed all three models with a raw sklearn traceback (`ValueError: could not convert string to float: 'Hillside'`) shown directly in the "Best parameters" column. This is the exact same bug shape as §4i-addendum's classification fix, just on the other side: nothing checked that a *regression* target must actually be numeric.
+
+**The fix** (`backend/app/services/config_validation.py`): a new `regression_target_issues(df, target)` function, checked the same way as `classification_target_issues` - as a non-blocking warning in the live preview (`ready_to_train: false`, so Configure catches it before Train) and as a hard error in `run_regression_training`. Uses the same `detect_column_type()` the dataset profile and feature-splitting logic already rely on, so "numeric" means exactly what it means everywhere else in the app.
+
+**A process bug found while verifying this fix**: the native backend dev server (running with `--reload` specifically to prevent the stale-code problem from §4i-addendum-2) logged `WatchFiles detected changes ... Reloading...` for the edited file, kept serving requests successfully, and yet kept returning the *old* (pre-fix) response - confirmed by hitting the API directly, bypassing the browser entirely, and separately confirmed the fix was correct by running it under pytest (a fresh process) at the same time, which passed immediately. The reload log never printed a following `Started server process [PID]` line, suggesting the reload silently failed to actually swap in a new worker despite claiming to. Resolved by fully killing and restarting the dev server process rather than trusting `--reload` — worth remembering: **`--reload` claiming to reload is not proof the code actually changed; verify by directly querying the API when in doubt, the same way this was caught.**
+
+**Test added:**
+- Backend (`test_regression_training.py`, +1): a categorical target is rejected with a message containing "numeric" and "categorical" and no leaked "traceback" text.
+- Backend (`test_config_preview.py`, +1): the same case at the preview endpoint — `ready_to_train: false` with the matching warning.
+- E2E (`all-combinations.spec.ts`, strengthened, not a new test): both existing combination-sweep tests now explicitly assert that a categorical column as a *regression* target (`neighborhood`/`has_parking` on `house_prices.csv`, `membership_type` on `customer_segments.csv`) reaches "not ready," closing the exact gap that let this bug through undetected the first time — the original sweep checked "settles without crashing" for every combination but only asserted specific ready/not-ready outcomes for the classification-side wrong choices, not the regression side.
+
+**Commands executed (all passing):**
+- `cd backend && pytest -q` → 88 passed
+- `cd backend && ruff check / ruff format --check / mypy app` → clean
+- `cd frontend && npx vitest run` → 31 passed (unchanged, no frontend files touched)
+- `cd e2e && npx playwright test` → 25 passed in ~56s
+- Direct API verification against a freshly restarted dev server, reproducing your exact steps → confirmed `ready_to_train: false` with a clean message, no traceback
 
 ## 5. Reference documents
 

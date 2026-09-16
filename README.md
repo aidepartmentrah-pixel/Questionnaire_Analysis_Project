@@ -5,6 +5,12 @@ regression, classification or clustering task, tune and train three models
 for that task, compare the results, and export the winner as a ready-to-use
 artifact.
 
+> **Live demo:** **[questionnaire-analysis-frontend.onrender.com](https://questionnaire-analysis-frontend.onrender.com/)**
+> — hosted on Render's free tier. Free instances sleep after ~15 minutes
+> idle, so the first request after a quiet spell can take 30-60s to wake up;
+> everything after that is normal speed. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+> for how this is hosted and how to manage it.
+
 ## Stack
 
 - **Backend:** Python, FastAPI, pandas, scikit-learn, XGBoost, Joblib
@@ -32,6 +38,15 @@ docker compose up --build
 This is also the project's **production-style run**: the frontend is
 compiled (`vite build`) and served as static files by nginx, not the dev
 server, and the backend runs `uvicorn` without `--reload`.
+
+## Deployment
+
+The live demo above runs as two independent Docker web services on Render
+(backend and frontend, deployed separately) rather than `docker compose`,
+since Render builds one Dockerfile per service. Full setup instructions,
+the exact configuration values, the mistakes that cost the most time getting
+there, and how to manage the deployed services (dashboard and CLI) are all in
+**[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
 
 ## Local development (without Docker)
 
@@ -79,7 +94,7 @@ of the two variables that *can* be overridden.
 ## Tests
 
 ```bash
-# Backend (86 tests)
+# Backend (88 tests)
 cd backend && ./.venv/Scripts/python -m pytest -q
 
 # Frontend (31 tests)
@@ -118,7 +133,7 @@ cd frontend && npx tsc --noEmit && npm run lint && npm run format:check
 backend/    FastAPI application, ML services, tests
 frontend/   React + TypeScript single-page app
 e2e/        Playwright end-to-end tests (drives backend + frontend together)
-docs/       Requirements, implementation plan, and progress log
+docs/       Requirements, implementation plan, progress log, and the deployment guide
 scripts/    Deterministic fixture generator
 tests/fixtures/   Committed sample CSVs used by every test layer and the demo below
 ```
@@ -151,14 +166,17 @@ Product-scope limits worth knowing before a demo:
   configuration isn't ready instead of failing silently. A warning is also
   shown whenever preprocessing would remove more than 30% of the original
   rows.
+- **A regression target must be numeric.** A categorical column (a
+  neighborhood name, a yes/no flag) picked as a regression target is
+  rejected with a clear message rather than reaching training.
 - **Classification additionally needs every class to have at least 6 rows**
   after preprocessing (so a stratified 80/20 split still leaves enough of
   the smallest class for 3-fold cross-validation), and at least 2 but no
   more than 20 distinct classes — a target with more than 20 distinct values
   is treated as a continuous measurement, not a category, and is rejected
-  with a suggestion to use Regression instead. Both checks run live in the
-  Configure step, not just at train time, so a bad target/task combination
-  is flagged before you ever click Start training.
+  with a suggestion to use Regression instead. All three of these checks run
+  live in the Configure step, not just at train time, so a bad target/task
+  combination is flagged before you ever click Start training.
 - **Clustering only uses numeric features** in this version — categorical
   columns are shown but disabled in the feature picker for that task.
 - Categorical columns where more than half the values are unique (e.g. an ID
@@ -281,4 +299,5 @@ only what's described above.
 
 See [docs/PROGRESS.md](docs/PROGRESS.md) for the detailed, slice-by-slice
 implementation log (what was built, what was tested, and known limitations
-at each stage).
+at each stage), and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for how the live
+demo is hosted and managed.

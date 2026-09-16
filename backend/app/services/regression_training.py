@@ -30,6 +30,7 @@ from app.schemas.training import (
 from app.services.config_validation import (
     ConfigValidationError,
     clean_training_subset,
+    regression_target_issues,
     validate_task_config,
 )
 from app.services.dataset_store import ActiveDataset
@@ -151,6 +152,10 @@ def run_regression_training(active: ActiveDataset, request: TrainingRequest) -> 
 
     target = request.target
     assert target is not None  # guaranteed for regression by validate_task_config above
+
+    target_issues = regression_target_issues(df, target)
+    if target_issues:
+        raise ConfigValidationError(" ".join(target_issues))
 
     clean = clean_training_subset(df, target, request.features, request.drop_duplicates)
     if len(clean) < MIN_ROWS_FOR_TRAINING:

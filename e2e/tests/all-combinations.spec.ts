@@ -166,6 +166,19 @@ test('every task × target combination on house_prices.csv settles cleanly, with
   expect(classificationOnId?.state).toBe('not-ready')
   expect(classificationOnDistance?.state).toBe('not-ready')
 
+  // The regression-side counterpart of the same bug family: a categorical
+  // column (a neighborhood name, a yes/no flag) picked as a *regression*
+  // target used to reach GridSearchCV and fail deep inside sklearn with a
+  // raw "could not convert string to float" traceback shown to the user.
+  const regressionOnNeighborhood = results.find(
+    (r) => r.task === 'regression' && r.target === 'neighborhood',
+  )
+  const regressionOnHasParking = results.find(
+    (r) => r.task === 'regression' && r.target === 'has_parking',
+  )
+  expect(regressionOnNeighborhood?.state).toBe('not-ready')
+  expect(regressionOnHasParking?.state).toBe('not-ready')
+
   const clustering = results.find((r) => r.task === 'clustering')
   expect(clustering?.state).not.toBe('incomplete')
 })
@@ -186,6 +199,12 @@ test('every task × target combination on customer_segments.csv settles cleanly,
     (r) => r.task === 'classification' && r.target === 'annual_income',
   )
   expect(classificationOnIncome?.state).toBe('not-ready')
+
+  // Regression-side counterpart: a categorical target must not reach ready.
+  const regressionOnMembership = results.find(
+    (r) => r.task === 'regression' && r.target === 'membership_type',
+  )
+  expect(regressionOnMembership?.state).toBe('not-ready')
 
   const clustering = results.find((r) => r.task === 'clustering')
   expect(clustering?.state).not.toBe('incomplete')

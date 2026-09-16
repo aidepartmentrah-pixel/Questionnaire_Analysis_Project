@@ -212,6 +212,28 @@ def test_too_few_rows_marks_configuration_not_ready(client: TestClient) -> None:
     assert any("at least" in w.lower() for w in body["warnings"])
 
 
+def test_regression_preview_flags_a_categorical_target_as_not_ready(client: TestClient) -> None:
+    """The live Configure-step preview must catch a categorical regression
+    target (e.g. a neighborhood name) before the user ever reaches Train,
+    where it would otherwise fail deep inside sklearn with a raw traceback.
+    """
+    rows = [f"{i},{'red' if i % 2 else 'blue'}" for i in range(40)]
+    csv_content = ("a,y\n" + "\n".join(rows) + "\n").encode()
+    upload = client.post(
+        "/api/datasets/upload", files={"file": ("categorical_target.csv", csv_content, "text/csv")}
+    )
+    dataset_id = upload.json()["dataset_id"]
+
+    response = _preview(
+        client, dataset_id, {"task": "regression", "target": "y", "features": ["a"]}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ready_to_train"] is False
+    assert any("numeric" in w.lower() and "categorical" in w.lower() for w in body["warnings"])
+
+
 def test_classification_preview_flags_a_continuous_looking_target_as_not_ready(
     client: TestClient,
 ) -> None:

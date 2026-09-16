@@ -11,6 +11,7 @@ import pandas as pd
 
 from app.schemas.config import PreprocessingPreview, PreprocessingRequest, TaskType
 from app.services.dataset_store import ActiveDataset
+from app.services.dataset_summary import detect_column_type
 from app.services.preprocessing_pipeline import (
     build_preprocessing_pipeline,
     readable_feature_names,
@@ -85,6 +86,24 @@ def validate_task_config(
         )
 
     return numeric_features, categorical_features
+
+
+def regression_target_issues(df: pd.DataFrame, target: str) -> list[str]:
+    """Structural problems with a regression target. Shared by the live
+    preview (surfaced as a non-blocking warning) and real training (raised
+    as a hard error), for the same reason as classification_target_issues
+    below: a real bug shipped where picking a categorical column (e.g. a
+    neighborhood name) as a regression target reached GridSearchCV and
+    failed deep inside sklearn with a raw Python traceback instead of a
+    clean, early message.
+    """
+    if detect_column_type(df[target]) != "numeric":
+        return [
+            f"The target column '{target}' must be numeric for regression - it looks "
+            "categorical (e.g. a label or name). Consider Classification, or choose a "
+            "different target column."
+        ]
+    return []
 
 
 def classification_target_issues(y: pd.Series) -> list[str]:
@@ -166,6 +185,12 @@ def build_preprocessing_preview(
             f"Only {final_rows} usable rows remain after preprocessing; at least "
             f"{MIN_ROWS_FOR_TRAINING} are required to train."
         )
+
+    if task == TaskType.regression and target is not None:
+        regression_issues = regression_target_issues(df, target)
+        if regression_issues:
+            warnings.extend(regression_issues)
+            ready_to_train = False
 
     if task == TaskType.classification and target is not None and final_rows > 0:
         class_issues = classification_target_issues(deduped[target])

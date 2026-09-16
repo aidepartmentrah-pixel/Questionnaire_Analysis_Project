@@ -252,6 +252,28 @@ def test_training_with_too_few_rows_is_rejected(client: TestClient) -> None:
     assert "usable rows" in response.json()["detail"].lower()
 
 
+def test_categorical_target_is_rejected_with_a_clean_message(client: TestClient) -> None:
+    """Regression test for a real bug: picking a categorical column (e.g. a
+    neighborhood name) as a regression target used to reach GridSearchCV and
+    fail deep inside sklearn with a raw Python traceback ("could not convert
+    string to float") shown to the user instead of a clean, early message.
+    """
+    rows = [f"{i},{'red' if i % 2 else 'blue'}" for i in range(40)]
+    csv_content = ("a,y\n" + "\n".join(rows) + "\n").encode()
+    upload = client.post(
+        "/api/datasets/upload", files={"file": ("categorical_target.csv", csv_content, "text/csv")}
+    )
+    dataset_id = upload.json()["dataset_id"]
+
+    response = _train(client, dataset_id, {"task": "regression", "target": "y", "features": ["a"]})
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "numeric" in detail.lower()
+    assert "categorical" in detail.lower()
+    assert "traceback" not in detail.lower()
+
+
 def test_train_for_unknown_dataset_returns_404(client: TestClient) -> None:
     response = _train(
         client, "does-not-exist", {"task": "regression", "target": "y", "features": ["x"]}
